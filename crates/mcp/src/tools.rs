@@ -413,7 +413,7 @@ fn tools() -> Vec<Value> {
         tool(
             "vue_bridge_propose_patch",
             "Vue bridge: propose style patch",
-            "Build a review-only unified diff for scoped CSS from styleEdits and/or designChanges (e.g. from dev.compare). Does not write the file; apply only via vueBridge.applyStylePatch with matching sha256Before.",
+            "Build a review-only unified diff for scoped CSS from styleEdits and/or designChanges (e.g. from dev.compare). Does not import Vue into the canvas. Does not write files; disk apply only via run_command vueBridge.applyStylePatch with confirmApply true and matching sha256Before.",
             obj(
                 json!({
                     "path": string("Path to .vue file under automation read roots"),

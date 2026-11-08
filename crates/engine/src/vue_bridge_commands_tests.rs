@@ -25,6 +25,20 @@ fn parse_command_reads_fixture_under_root() {
 }
 
 #[test]
+fn map_import_outside_root_is_rejected() {
+    let root = fixture_root();
+    let roots = Arc::new(Roots::new(&[root.to_string_lossy().into_owned()], &[]).expect("roots"));
+    confined(Some(&roots), || {
+        let mut s = Session::new();
+        let err = s
+            .execute("vueBridge.mapImport", &json!({"path": "/etc/passwd"}))
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("automation path rejected"));
+    });
+}
+
+#[test]
 fn parse_outside_root_is_rejected() {
     let root = fixture_root();
     let roots = Arc::new(Roots::new(&[root.to_string_lossy().into_owned()], &[]).expect("roots"));

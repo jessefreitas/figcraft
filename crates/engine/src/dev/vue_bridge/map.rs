@@ -65,6 +65,9 @@ fn validate_link(cmd: &str, index: usize, l: &MapLink) -> Result<()> {
     if l.vue_path.contains("..") || l.vue_path.starts_with('/') || l.vue_path.contains('\\') {
         return Err(bad(cmd, format!("links[{index}].vuePath: use a relative path without ..")));
     }
+    if !l.vue_path.ends_with(".vue") {
+        return Err(bad(cmd, format!("links[{index}].vuePath: must end with .vue")));
+    }
     if let Some(id) = &l.data_ai_id {
         if id.is_empty() || id.len() > MAX_DATA_AI_ID || id.chars().any(|c| c.is_whitespace()) {
             return Err(bad(cmd, format!("links[{index}].dataAiId: invalid")));

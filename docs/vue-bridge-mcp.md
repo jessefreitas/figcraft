@@ -1,9 +1,9 @@
 # Vue bridge (MCP extension)
 
-> **Status:** first slice — mapping, static SFC parse, review-only style patches.  
-> **Not:** Vue import, full-screen codegen, ERP API integration, or automatic apply (opt-in command only).
+> **What this is:** metadata mapping, **static** parsing of Vue SFCs on disk, and **review-only** (or opt-in) patches to the `<style scoped>` block.  
+> **What this is NOT:** importing Vue into the FigCraft **canvas**, rendering Vue in the design file, or replacing Code Connect/codegen. Design layers stay FigCraft-native; the bridge only reads/writes `.vue` files under automation roots.
 
-Connects FigCraft **design autoria** to **existing Vue SFCs** under automation roots (`--automation-read-root` / `--automation-write-root`).
+Connects FigCraft **design autoria** to **existing Vue SFCs** (`--automation-read-root` / `--automation-write-root`). All file paths (`mapImport`, `mapExport`, `mapInspect`, `parse`, `handoff`, `apply`) go through `file_access` (canonicalize + root confinement).
 
 ## Map file (`vue-bridge.map.json`)
 
@@ -13,58 +13,66 @@ Connects FigCraft **design autoria** to **existing Vue SFCs** under automation r
   "links": [
     {
       "designComponent": "TechnicalButton",
-      "vuePath": "fixtures/TechnicalButton.vue",
+      "vuePath": "TechnicalButton.vue",
       "dataAiId": "technical-button-fixture",
-      "notes": "TEST FIXTURE"
+      "notes": "TECHNICAL TEST FIXTURE"
     }
   ]
 }
 ```
 
-- Paths must be **relative** (no `..`).
-- Linking is by **design component name** (same idea as Code Connect, separate file).
+- `vuePath`: relative, no `..`, must end with `.vue` (max sizes: map file 4 MiB, Vue file 2 MiB).
+- `designComponent`: name matched against **FigCraft component names** in `mapInspect` (not auto-import of Vue visuals).
 
 ## Engine commands
 
-| Command | Role |
-|---------|------|
-| `vueBridge.mapImport` / `mapExport` / `mapInspect` | Registry |
-| `vueBridge.parse` | Static props/emits/`data-ai-id` scan |
-| `vueBridge.guardrails` | Required `dataAiId` check |
-| `vueBridge.proposeStylePatch` | Unified diff, **no write** |
-| `vueBridge.applyStylePatch` | Opt-in write if `sha256Before` matches |
-| `vueBridge.handoffFromDesign` | Layout rows from `dev.compare`-style JSON |
+| Command | Writes? |
+|---------|---------|
+| `vueBridge.mapImport` / `mapInspect` / `parse` / `guardrails` / `proposeStylePatch` / `handoffFromDesign` | No |
+| `vueBridge.mapExport` | Only with `path` in a **write** root |
+| `vueBridge.applyStylePatch` | Only with `confirmApply: true`, matching `sha256Before`, passing validation, **write** root |
 
-## MCP tools (3 added)
+Apply refuses: SHA mismatch (concurrent edit), missing `confirmApply`, empty/invalid `styleEdits`, zero or multiple `<style scoped>` blocks, template/script change, lost `data-ai-id`.
 
-| Tool | Engine command |
-|------|----------------|
-| `vue_bridge_map_inspect` | `vueBridge.mapInspect` |
-| `vue_bridge_parse` | `vueBridge.parse` |
-| `vue_bridge_propose_patch` | `vueBridge.proposeStylePatch` |
+## MCP tools (3)
 
-Official MCP tool count becomes **22** when this build is used (19 + 3). Clients that pin 19 tools should allow the new names or call via `run_command`.
+| Tool | Role |
+|------|------|
+| `vue_bridge_map_inspect` | Map + optional match to open `.figcraft` component **names** |
+| `vue_bridge_parse` | Static SFC scan |
+| `vue_bridge_propose_patch` | Diff + `applicable` / `blockers` |
 
-## Suggested flow (review)
+MCP builds list **22** tools (19 core + 3 bridge). Applying still requires `run_command` → `vueBridge.applyStylePatch` with `confirmApply`.
 
-1. Edit layout in FigCraft; run `dev.compare` via `run_command`.
-2. `vue_bridge_map_inspect` with `vue-bridge.map.json`.
-3. `vue_bridge_propose_patch` with `designChanges` from compare + `requiredDataAiId`.
-4. Human applies diff to Vue; JEV/harness on ERP branch (out of repo scope).
+## Protections vs tests (not exhaustive)
 
-## Error protections (slice 1)
+| Risk | Mechanism | Regression test (engine) |
+|------|-----------|--------------------------|
+| Path escape | `file_access` + map rules | `parse_outside_root_is_rejected`, `map_import_outside_root_is_rejected`, `map_rejects_path_traversal` |
+| Wrong base / concurrent write | `sha256Before` | `apply_requires_confirm_and_matching_sha`, `apply_succeeds_with_confirm_and_rejects_second_apply_after_change` |
+| False success on bad edits | `applicable` + `blockers` | `propose_reports_not_applicable_without_edits`, `empty_property_edit_not_applicable` |
+| Multiple scoped styles | refuse | `double_scoped_style_blocks_apply` |
+| Template/script/id touched | post-apply invariant | enforced inside `apply_style_edits_for_write` |
+| Full layout regen | scoped CSS only | `propose_patch_adds_gap_without_touching_template` |
+| ERP API / fake success | out of scope | — |
+| JEV wrong SHA/route/screenshot | **not enforced here** | see Harness below |
+| WGPU black window | **not in this crate** | ops: `WGPU_BACKEND=gl` |
 
-| Risk | Protection | Test |
-|------|------------|------|
-| Layout rewrite / full regen | Patch touches **scoped style** only; docs + warnings | `propose_patch_adds_gap_without_touching_template` |
-| Lose `data-ai-id` | `requiredDataAiId` guardrail | `guardrails_flags_missing_data_ai_id` |
-| Path traversal | Map + `file_access` roots | `map_rejects_path_traversal` |
-| Blind overwrite | `applyStylePatch` needs matching `sha256Before` | command code (engine tests pending apply path) |
-| WGPU black window | **Not in this crate** — operational `WGPU_BACKEND=gl`; see ops runbook | not claimed here |
+**These tests do not prove** end-to-end OmniPharma Vue parity, handler preservation in real components, or MCP on a desktop attach session.
 
-## Not covered yet
+## Harness / JEV integration (required outside FigCraft)
 
-- Parsing full Vue template AST / preserving `@click` handlers in patches
-- Bi-directional sync from Vue → FigCraft
-- ERP-specific components (requires customer repo + harness)
-- Desktop attach smoke on Jesse's PC
+The bridge does **not** validate git branch, route names, or screenshot pixels. Recommended handoff:
+
+1. `proposeStylePatch` → human review → optional `applyStylePatch` with fresh `sha256Before`.
+2. ERP CI/harness: JEV on declared route, assert `data-ai-id`, compare commit SHA in evidence metadata.
+3. Mira/CodeQL on the Vue PR — unchanged by this slice.
+
+No fabricated customer data in FigCraft fixtures.
+
+## Not covered
+
+- Vue → canvas visual import
+- Template/`@click`/emit patching
+- Real ERP monolith paths (pending customer repo + roots)
+- Desktop MCP attach verification on operator PC

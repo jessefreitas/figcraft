@@ -5,11 +5,14 @@ mod cmd;
 mod map;
 mod parse;
 mod patch;
+mod validate;
 
 pub use cmd::specs;
 pub use map::{MapFile, MapLink, VERSION as MAP_VERSION};
 pub use parse::{ParsedVue, parse_sfc};
 pub use patch::{PatchProposal, propose_style_patch};
 
+#[cfg(test)]
+mod apply_tests;
 #[cfg(test)]
 mod tests;

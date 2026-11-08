@@ -38,6 +38,13 @@ fn map_rejects_path_traversal() {
 }
 
 #[test]
+fn map_requires_vue_extension() {
+    let json = br#"{"version":1,"links":[{"designComponent":"X","vuePath":"foo.ts"}]}"#;
+    let err = parse_map_bytes("test", json).unwrap_err().to_string();
+    assert!(err.contains(".vue"));
+}
+
+#[test]
 fn propose_patch_adds_gap_without_touching_template() {
     let proposal = propose_style_patch(
         "fixtures/TechnicalButton.vue",
@@ -46,7 +53,7 @@ fn propose_patch_adds_gap_without_touching_template() {
         &[StyleEdit { property: "gap".into(), value: "12px".into(), selector: Some(".technical-root".into()) }],
         &[],
     );
-    assert!(proposal.warnings.is_empty());
+    assert!(proposal.applicable);
     assert!(proposal.diff.contains('+'));
     assert!(FIXTURE.contains("data-ai-id=\"technical-button-fixture\""));
     assert!(!proposal.diff.contains("<template>"));

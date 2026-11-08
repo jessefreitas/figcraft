@@ -56,7 +56,7 @@ pub fn parse_sfc(vue_path: &str, source: &str) -> ParsedVue {
     }
 }
 
-fn block_content_owned(source: &str, tag: &str) -> Option<String> {
+pub(crate) fn block_content_owned(source: &str, tag: &str) -> Option<String> {
     let lower = source.to_ascii_lowercase();
     let open = format!("<{tag}");
     let start = lower.find(&open)?;

@@ -9,7 +9,8 @@ use crate::{EngineError, Result, Session, bad, spec};
 
 use super::map::{MapFile, MapLink, MAX_FILE, VERSION, parse_map_bytes, parse_map_json, to_pretty};
 use super::parse::{MAX_VUE_BYTES, parse_sfc};
-use super::patch::{StyleEdit, propose_style_patch, sha256_hex};
+use super::patch::{ApplyOutcome, StyleEdit, propose_style_patch, sha256_hex};
+use crate::params::boolean as param_bool;
 
 const CMD: &str = "vueBridge";
 
@@ -208,11 +209,14 @@ pub fn specs() -> Vec<CommandSpec> {
         spec!(
             "vueBridge.applyStylePatch",
             "Apply Vue style patch (opt-in)",
-            "{path, sha256Before, styleEdits?: [...]}  writes only when sha256 matches and path is in a write root  → {path, sha256After}",
+            "{path, sha256Before, confirmApply: true, styleEdits: [...]}  writes only when sha256 matches, confirmApply is true, validation passes, and path is in a write root  → {path, sha256After, apply: true}",
             false,
             |_, p| {
                 let cmd = "vueBridge.applyStylePatch";
                 let path = opt_str(p, "path").ok_or_else(|| bad(cmd, "path: string"))?;
+                if param_bool(p, "confirmApply") != Some(true) {
+                    return Err(bad(cmd, "confirmApply: true is required to write a Vue file"));
+                }
                 let expected = opt_str(p, "sha256Before").ok_or_else(|| bad(cmd, "sha256Before: string"))?;
                 let source = read_vue(cmd, &path)?;
                 let actual = sha256_hex(source.as_bytes());
@@ -223,16 +227,29 @@ pub fn specs() -> Vec<CommandSpec> {
                     Some(v) => serde_json::from_value(v.clone()).map_err(|e| bad(cmd, format!("styleEdits: {e}")))?,
                     None => Vec::new(),
                 };
+                if edits.is_empty() {
+                    return Err(bad(cmd, "styleEdits: at least one edit is required"));
+                }
                 let proposal = propose_style_patch(&path, &source, None, &edits, &[]);
-                if proposal.diff.contains("unchanged") || proposal.diff.contains("no change") {
-                    return Err(bad(cmd, "nothing to apply"));
+                if !proposal.applicable {
+                    return Err(bad(cmd, format!("patch blocked: {}", proposal.blockers.join("; "))));
                 }
-                let mut updated = source;
-                if super::patch::apply_style_edits_for_write(&mut updated, &edits).is_none() {
-                    return Err(bad(cmd, "no <style scoped> block to patch"));
+                let mut updated = source.clone();
+                match super::patch::apply_style_edits_for_write(&mut updated, &edits) {
+                    ApplyOutcome::Applied { .. } => {}
+                    ApplyOutcome::NoChange { reason } => return Err(bad(cmd, reason)),
+                    ApplyOutcome::Blocked { reason } => return Err(bad(cmd, reason)),
                 }
+                let after_hash = sha256_hex(updated.as_bytes());
                 crate::file_access::write(&path, updated.as_bytes())?;
-                Ok(json!({"path": path, "sha256After": sha256_hex(updated.as_bytes()), "apply": true}))
+                Ok(json!({
+                    "path": path,
+                    "sha256Before": actual,
+                    "sha256After": after_hash,
+                    "apply": true,
+                    "templateUnchanged": true,
+                    "scriptUnchanged": true,
+                }))
             }
         ),
         spec!(
