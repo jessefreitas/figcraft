@@ -115,6 +115,7 @@ pub const TOOL_NAMES: &[&str] = &[
     "vue_bridge_map_inspect",
     "vue_bridge_parse",
     "vue_bridge_propose_patch",
+    "vue_bridge_import_visual",
 ];
 
 /// The tools that take `document`: they act on the file it names instead of the one in front.
@@ -425,6 +426,24 @@ fn tools() -> Vec<Value> {
             ),
             true,
         ),
+        tool(
+            "vue_bridge_import_visual",
+            "Vue bridge: import visual (canvas)",
+            "Statically import a Vue SFC template subset into the open FigCraft document as editable frames/text linked via pluginData (engine vueBridge.importVisual). Dry-run by default; set confirmImport true to apply as one undo step. Does not execute Vue or write the .vue file.",
+            obj(
+                json!({
+                    "path": string("Path to .vue file under automation read roots"),
+                    "dryRun": {"type": "boolean", "description": "Preview plan only (default true unless confirmImport is true)"},
+                    "confirmImport": {"type": "boolean", "description": "Apply import to the open document (single undo step)"},
+                    "x": int("Root frame X on page"),
+                    "y": int("Root frame Y on page"),
+                    "requiredDataAiId": string("Warn when this data-ai-id is missing from the template"),
+                    "palettePaths": {"type": "array", "items": {"type": "string"}, "description": "Optional CW palette CSS paths under automation read roots (static read only)"},
+                }),
+                &["path"],
+            ),
+            true,
+        ),
     ]
 }
 
@@ -617,6 +636,7 @@ pub fn call_tool(b: &mut dyn Backend, name: &str, args: &Value) -> ToolResult {
         "vue_bridge_map_inspect" => vue_bridge_map_inspect(b, &a),
         "vue_bridge_parse" => vue_bridge_parse(b, &a),
         "vue_bridge_propose_patch" => vue_bridge_propose_patch(b, &a),
+        "vue_bridge_import_visual" => vue_bridge_import_visual(b, &a),
         other => Err(format!("unknown tool `{other}` (tools/list has: {})", TOOL_NAMES.join(", "))),
     };
     r.unwrap_or_else(ToolResult::error)
@@ -1299,4 +1319,21 @@ fn vue_bridge_propose_patch(b: &mut dyn Backend, a: &Map<String, Value>) -> Resu
         }
     }
     exec(b, "vueBridge.proposeStylePatch", params).map(|v| ToolResult::json(&v))
+}
+
+fn vue_bridge_import_visual(b: &mut dyn Backend, a: &Map<String, Value>) -> Result<ToolResult, String> {
+    let path = req_s(a, "path")?;
+    let mut params = json!({"path": path});
+    for key in ["x", "y", "parent", "requiredDataAiId"] {
+        if let Some(v) = a.get(key).filter(|v| !v.is_null()) {
+            params[key] = v.clone();
+        }
+    }
+    if let Some(v) = a.get("dryRun").filter(|v| !v.is_null()) {
+        params["dryRun"] = v.clone();
+    }
+    if a.get("confirmImport").and_then(Value::as_bool) == Some(true) {
+        params["confirmImport"] = json!(true);
+    }
+    exec(b, "vueBridge.importVisual", params).map(|v| ToolResult::json(&v))
 }

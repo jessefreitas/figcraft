@@ -10,6 +10,12 @@ use crate::{EngineError, Result, Session, bad, spec};
 use super::map::{MapFile, MapLink, MAX_FILE, VERSION, parse_map_bytes, parse_map_json, to_pretty};
 use super::parse::{MAX_VUE_BYTES, parse_sfc};
 use super::patch::{ApplyOutcome, StyleEdit, propose_style_patch, sha256_hex};
+use super::diagnostics::{ImportProvenance, diagnose_sfc};
+use super::palette::scan_palette_paths;
+use super::visual_import::{
+    PD_DATA_AI_ID, PD_DESIGN_COMPONENT, PD_GIT_SHA_UNVERIFIED, PD_OMNI_UI_COMPONENT, PD_OMNI_UI_LINK_STATUS, PD_ORIGIN_PILOT,
+    PD_ORIGIN_TREE, PD_SOURCE_PATH, PD_SOURCE_SHA, PD_VUE_CLASS, PD_VUE_TAG, apply_visual_plan, build_visual_plan_with_context,
+};
 use crate::params::boolean as param_bool;
 
 const CMD: &str = "vueBridge";
@@ -21,6 +27,20 @@ fn read_vue(cmd: &str, path: &str) -> Result<String> {
 
 fn opt_str(p: &Value, key: &str) -> Option<String> {
     param_string(p, key)
+}
+
+fn palette_paths(cmd: &str, p: &Value) -> Result<Option<super::palette::PaletteScan>> {
+    let Some(arr) = get(p, "palettePaths").and_then(Value::as_array) else {
+        return Ok(None);
+    };
+    let paths: Vec<String> = arr
+        .iter()
+        .filter_map(|v| v.as_str().map(str::to_string))
+        .collect();
+    if paths.is_empty() {
+        return Ok(None);
+    }
+    scan_palette_paths(cmd, &paths).map(Some)
 }
 
 fn read_map_path(cmd: &str, p: &Value) -> Result<MapFile> {
@@ -250,6 +270,118 @@ pub fn specs() -> Vec<CommandSpec> {
                     "templateUnchanged": true,
                     "scriptUnchanged": true,
                 }))
+            }
+        ),
+        spec!(
+            "vueBridge.importVisual",
+            "Import Vue template into canvas (subset)",
+            "{path, dryRun?: true, confirmImport?: true, x?, y?, parent?, requiredDataAiId?, originPilot?, originTree?, gitShaUnverified?, designComponent?, omniUiComponent?, palettePaths?}  CW/Omni UI SFC → frames/text with figcraft.vueBridge.* provenance; palettePaths? (array of CSS under automation roots); default dry-run; confirmImport applies one undo step (does not write the .vue file)",
+            true,
+            |s, p| {
+                let cmd = "vueBridge.importVisual";
+                let path = opt_str(p, "path").ok_or_else(|| bad(cmd, "path: string"))?;
+                let source = read_vue(cmd, &path)?;
+                let content_sha = sha256_hex(source.as_bytes());
+                let provenance = ImportProvenance {
+                    origin_pilot: opt_str(p, "originPilot"),
+                    origin_tree: opt_str(p, "originTree"),
+                    content_sha256: content_sha.clone(),
+                    git_sha_unverified: opt_str(p, "gitShaUnverified"),
+                    design_component: opt_str(p, "designComponent"),
+                };
+                let omni_ui_component = opt_str(p, "omniUiComponent");
+                let palette = palette_paths(cmd, p)?;
+                let diagnostics = diagnose_sfc(&path, &source, provenance.clone(), omni_ui_component.clone(), palette);
+                let mut plan = build_visual_plan_with_context(&path, &source, Some(provenance), omni_ui_component);
+                if let Some(req) = opt_str(p, "requiredDataAiId") {
+                    let present = plan.links.iter().any(|l| l.data_ai_id.as_deref() == Some(req.as_str()));
+                    if !present {
+                        plan.warnings.push(format!("required data-ai-id `{req}` not found in import plan"));
+                    }
+                }
+                let confirm = param_bool(p, "confirmImport") == Some(true);
+                let explicit_dry = param_bool(p, "dryRun");
+                let dry = if confirm {
+                    false
+                } else {
+                    explicit_dry.unwrap_or(true)
+                };
+                if dry {
+                    return Ok(json!({
+                        "dryRun": true,
+                        "vuePath": plan.vue_path,
+                        "sourceSha256": plan.source_sha256,
+                        "rootKey": plan.root_key,
+                        "nodes": plan.nodes,
+                        "links": plan.links,
+                        "unsupported": plan.unsupported,
+                        "warnings": plan.warnings,
+                        "diagnostics": diagnostics,
+                        "confirmImportRequired": true,
+                    }));
+                }
+                let x = crate::params::num_or(p, "x", 0.0);
+                let y = crate::params::num_or(p, "y", 0.0);
+                let parent = crate::params::opt_id(cmd, p, "parent")?;
+                let mut out = apply_visual_plan(s, plan, x, y, parent)?;
+                if let Some(o) = out.as_object_mut() {
+                    o.insert("diagnostics".into(), serde_json::to_value(diagnostics).map_err(|e| EngineError::Other(e.to_string()))?);
+                }
+                Ok(out)
+            }
+        ),
+        spec!(
+            "vueBridge.diagnose",
+            "Diagnose Vue SFC for import (static)",
+            "{path, originPilot?, originTree?, gitShaUnverified?, designComponent?, omniUiComponent?, palettePaths?}  props/emits, unsupported template features, Omni UI link status, static palette/token resolution notes  → diagnostics JSON",
+            false,
+            |_, p| {
+                let cmd = "vueBridge.diagnose";
+                let path = opt_str(p, "path").ok_or_else(|| bad(cmd, "path: string"))?;
+                let source = read_vue(cmd, &path)?;
+                let content_sha = sha256_hex(source.as_bytes());
+                let provenance = ImportProvenance {
+                    origin_pilot: opt_str(p, "originPilot"),
+                    origin_tree: opt_str(p, "originTree"),
+                    content_sha256: content_sha,
+                    git_sha_unverified: opt_str(p, "gitShaUnverified"),
+                    design_component: opt_str(p, "designComponent"),
+                };
+                let palette = palette_paths(cmd, p)?;
+                let d = diagnose_sfc(&path, &source, provenance, opt_str(p, "omniUiComponent"), palette);
+                Ok(serde_json::to_value(d).map_err(|e| EngineError::Other(e.to_string()))?)
+            }
+        ),
+        spec!(
+            "vueBridge.inspectVisualLink",
+            "Inspect Vue bridge links on a layer",
+            "{id}  reads figcraft.vueBridge.* pluginData written by importVisual  → {linked, pluginData}",
+            false,
+            |s, p| {
+                let cmd = "vueBridge.inspectVisualLink";
+                let id = crate::params::id(p, "id").ok_or_else(|| bad(cmd, "id: string"))?;
+                let doc = s.doc()?;
+                let n = doc.get(id)?;
+                let mut plugin = serde_json::Map::new();
+                for key in [
+                    PD_SOURCE_PATH,
+                    PD_SOURCE_SHA,
+                    PD_DATA_AI_ID,
+                    PD_VUE_TAG,
+                    PD_VUE_CLASS,
+                    PD_ORIGIN_PILOT,
+                    PD_ORIGIN_TREE,
+                    PD_GIT_SHA_UNVERIFIED,
+                    PD_OMNI_UI_COMPONENT,
+                    PD_OMNI_UI_LINK_STATUS,
+                    PD_DESIGN_COMPONENT,
+                ] {
+                    if let Some(v) = n.plugin_data.get(key) {
+                        plugin.insert(key.into(), json!(v));
+                    }
+                }
+                let linked = plugin.contains_key(PD_SOURCE_PATH) && plugin.contains_key(PD_VUE_TAG);
+                Ok(json!({"id": id.to_string(), "linked": linked, "pluginData": plugin}))
             }
         ),
         spec!(

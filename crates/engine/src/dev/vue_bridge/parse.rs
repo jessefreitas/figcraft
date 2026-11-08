@@ -66,7 +66,7 @@ pub(crate) fn block_content_owned(source: &str, tag: &str) -> Option<String> {
     Some(source[after_open..end].trim().to_string())
 }
 
-fn block_content_scoped_owned(source: &str) -> Option<String> {
+pub(crate) fn block_content_scoped_owned(source: &str) -> Option<String> {
     let lower = source.to_ascii_lowercase();
     let mut search = 0usize;
     while let Some(rel) = lower[search..].find("<style") {
