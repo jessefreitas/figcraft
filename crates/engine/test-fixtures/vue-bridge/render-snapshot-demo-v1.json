@@ -1,0 +1,57 @@
+{
+  "version": 1,
+  "captureKind": "harness-technical-demo",
+  "provenance": {
+    "originPilot": "TECHNICAL-FIXTURE-NOT-PROTOTYPER",
+    "prototyperRef": "schema-demo-v1",
+    "vuePath": "TechnicalButton.vue",
+    "sourceSha256": "24724182564b3327c7eb35843dc9409e697f9cc4743d8a2fb13a28e05726aa13",
+    "omniUiComponent": "TechnicalButton",
+    "designComponent": "TechnicalDemo",
+    "capturedAt": "2026-11-08T00:00:00Z"
+  },
+  "viewport": { "width": 400, "height": 200, "devicePixelRatio": 1 },
+  "warnings": [
+    "TECHNICAL FIXTURE ONLY — not captured from a live prototyper runtime",
+    "Replace with prototyper v1 snapshot before claiming CW/OmniButton fidelity"
+  ],
+  "nodes": [
+    {
+      "key": "root",
+      "parentKey": null,
+      "layerKind": "frame",
+      "name": "Technical demo button (render snapshot)",
+      "domTag": "button",
+      "vueTag": "button",
+      "dataAiId": "technical-omni-button-demo",
+      "bounds": { "x": 0, "y": 0, "width": 120, "height": 44 },
+      "computedStyle": {
+        "display": "flex",
+        "flexDirection": "row",
+        "alignItems": "center",
+        "justifyContent": "center",
+        "gap": "8px",
+        "paddingLeft": "18px",
+        "paddingRight": "18px",
+        "backgroundColor": "rgb(3, 111, 147)",
+        "color": "rgb(255, 255, 255)",
+        "fontFamily": "Manrope, system-ui, sans-serif",
+        "fontSize": "14px",
+        "borderRadius": "8px"
+      }
+    },
+    {
+      "key": "label",
+      "parentKey": "root",
+      "layerKind": "text",
+      "name": "Label",
+      "bounds": { "x": 18, "y": 12, "width": 72, "height": 20 },
+      "text": "Action",
+      "computedStyle": {
+        "color": "rgb(255, 255, 255)",
+        "fontFamily": "Manrope",
+        "fontSize": "14px"
+      }
+    }
+  ]
+}

@@ -1,7 +1,6 @@
 # Vue bridge (MCP extension)
 
-> **What this is:** metadata mapping, **static** parsing of Vue SFCs on disk, and **review-only** (or opt-in) patches to the `<style scoped>` block.  
-> **What this is:** metadata mapping, static SFC parse, **subset visual import** into the canvas (frames/text + `pluginData` links), scoped-CSS patch proposals, and static **diagnostics** (including optional `palettePaths` for CW/OmniFarma CSS — no JS palette generator, no invented tokens).
+> **What this is:** metadata mapping, static SFC parse, **prototyper render snapshot import** (preferred), subset static visual import, scoped-CSS patch proposals, and static **diagnostics** (optional `palettePaths` for CW palette CSS — no JS generator, no invented tokens).
 >
 > **What this is NOT:** a Vue runtime, Omni UI regeneration, ERP API access, or replacing Code Connect/codegen. FigCraft does not substitute the CW pilot app.
 
@@ -47,6 +46,8 @@ Apply refuses: SHA mismatch (concurrent edit), missing `confirmApply`, empty/inv
 Provenance keys on imported layers: `figcraft.vueBridge.sourcePath`, `sourceSha256`, `originPilot`, `originTree`, `gitShaUnverified` (labelled unverified), `omniUiComponent`, `omniUiLinkStatus` (`pending` until static `data-ai-id` + Omni mapping are satisfied). **Content SHA** is verifiable; **git SHA** from CW archive without `.git` is not.
 
 Optional `palettePaths`: paths under automation read roots to `omnifarma-tokens.css`, `paleta.generated.css`, `fontes.css`, `_next-colors.scss`. FigCraft **reads** CSS only; it does not run `gerar_paleta_app.mjs` or paint `n-*` Tailwind classes from computed script strings.
+
+**Preferred import path:** inert **prototyper render snapshot** ([vue-bridge-render-snapshot.md](vue-bridge-render-snapshot.md)) — not static SFC guessing. Port/embed study: [vue-bridge-prototyper-port-study.md](vue-bridge-prototyper-port-study.md).
 
 ## MCP tools (4 bridge)
 

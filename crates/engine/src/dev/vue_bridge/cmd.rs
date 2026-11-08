@@ -12,13 +12,23 @@ use super::parse::{MAX_VUE_BYTES, parse_sfc};
 use super::patch::{ApplyOutcome, StyleEdit, propose_style_patch, sha256_hex};
 use super::diagnostics::{ImportProvenance, diagnose_sfc};
 use super::palette::scan_palette_paths;
+use super::render_snapshot::{self, MAX_SNAPSHOT_BYTES, apply_snapshot, validate_and_hash};
 use super::visual_import::{
-    PD_DATA_AI_ID, PD_DESIGN_COMPONENT, PD_GIT_SHA_UNVERIFIED, PD_OMNI_UI_COMPONENT, PD_OMNI_UI_LINK_STATUS, PD_ORIGIN_PILOT,
-    PD_ORIGIN_TREE, PD_SOURCE_PATH, PD_SOURCE_SHA, PD_VUE_CLASS, PD_VUE_TAG, apply_visual_plan, build_visual_plan_with_context,
+    PD_CAPTURE_KIND, PD_DATA_AI_ID, PD_DESIGN_COMPONENT, PD_GIT_SHA_UNVERIFIED, PD_OMNI_UI_COMPONENT, PD_OMNI_UI_LINK_STATUS,
+    PD_ORIGIN_PILOT, PD_ORIGIN_TREE, PD_PROTOTYPER_REF, PD_SNAPSHOT_SHA256, PD_SOURCE_PATH, PD_SOURCE_SHA, PD_VUE_CLASS, PD_VUE_TAG,
+    apply_visual_plan, build_visual_plan_with_context,
 };
 use crate::params::boolean as param_bool;
 
 const CMD: &str = "vueBridge";
+
+fn read_snapshot(cmd: &str, p: &Value) -> Result<Vec<u8>> {
+    match (get(p, "json"), opt_str(p, "path")) {
+        (Some(v), _) => Ok(serde_json::to_vec(v).map_err(|e| bad(cmd, format!("json: {e}")))?),
+        (None, Some(path)) => crate::file_access::read_capped(&path, MAX_SNAPSHOT_BYTES),
+        (None, None) => Err(bad(cmd, "pass `json` or `path`")),
+    }
+}
 
 fn read_vue(cmd: &str, path: &str) -> Result<String> {
     let bytes = crate::file_access::read_capped(path, MAX_VUE_BYTES)?;
@@ -353,6 +363,62 @@ pub fn specs() -> Vec<CommandSpec> {
             }
         ),
         spec!(
+            "vueBridge.validateRenderSnapshot",
+            "Validate prototyper render snapshot (inert JSON)",
+            "{json | path}  schema v1 from authorized prototyper/harness (not live DOM)  → {snapshotSha256, nodeCount, captureKind, warnings}",
+            false,
+            |_, p| {
+                let cmd = "vueBridge.validateRenderSnapshot";
+                let bytes = read_snapshot(cmd, p)?;
+                let v = validate_and_hash(cmd, &bytes)?;
+                Ok(json!({
+                    "version": render_snapshot::VERSION,
+                    "snapshotSha256": v.snapshot_sha256,
+                    "nodeCount": v.node_count,
+                    "captureKind": v.snapshot.capture_kind,
+                    "rootKey": v.root_key,
+                    "provenance": v.snapshot.provenance,
+                    "warnings": v.snapshot.warnings,
+                }))
+            }
+        ),
+        spec!(
+            "vueBridge.importRenderSnapshot",
+            "Import prototyper render snapshot to canvas",
+            "{json | path, dryRun?: true, confirmImport?: true, x?, y?, parent?}  applies measured DOM/computedStyle from inert snapshot; default dry-run; does not run prototyper or browse production",
+            true,
+            |s, p| {
+                let cmd = "vueBridge.importRenderSnapshot";
+                let bytes = read_snapshot(cmd, p)?;
+                let validated = validate_and_hash(cmd, &bytes)?;
+                let confirm = param_bool(p, "confirmImport") == Some(true);
+                let dry = if confirm {
+                    false
+                } else {
+                    param_bool(p, "dryRun").unwrap_or(true)
+                };
+                if dry {
+                    return Ok(json!({
+                        "dryRun": true,
+                        "importKind": "renderSnapshot",
+                        "snapshotSha256": validated.snapshot_sha256,
+                        "nodeCount": validated.node_count,
+                        "captureKind": validated.snapshot.capture_kind,
+                        "rootKey": validated.root_key,
+                        "nodes": validated.snapshot.nodes,
+                        "provenance": validated.snapshot.provenance,
+                        "warnings": validated.snapshot.warnings,
+                        "confirmImportRequired": true,
+                        "note": "Static vueBridge.importVisual is not sufficient for Omni UI fidelity; prefer prototyper snapshots",
+                    }));
+                }
+                let x = crate::params::num_or(p, "x", 0.0);
+                let y = crate::params::num_or(p, "y", 0.0);
+                let parent = crate::params::opt_id(cmd, p, "parent")?;
+                apply_snapshot(s, validated, x, y, parent)
+            }
+        ),
+        spec!(
             "vueBridge.inspectVisualLink",
             "Inspect Vue bridge links on a layer",
             "{id}  reads figcraft.vueBridge.* pluginData written by importVisual  → {linked, pluginData}",
@@ -375,6 +441,9 @@ pub fn specs() -> Vec<CommandSpec> {
                     PD_OMNI_UI_COMPONENT,
                     PD_OMNI_UI_LINK_STATUS,
                     PD_DESIGN_COMPONENT,
+                    PD_CAPTURE_KIND,
+                    PD_PROTOTYPER_REF,
+                    PD_SNAPSHOT_SHA256,
                 ] {
                     if let Some(v) = n.plugin_data.get(key) {
                         plugin.insert(key.into(), json!(v));

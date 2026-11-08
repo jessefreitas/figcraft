@@ -23,6 +23,9 @@ pub const PD_GIT_SHA_UNVERIFIED: &str = "figcraft.vueBridge.gitShaUnverified";
 pub const PD_OMNI_UI_COMPONENT: &str = "figcraft.vueBridge.omniUiComponent";
 pub const PD_OMNI_UI_LINK_STATUS: &str = "figcraft.vueBridge.omniUiLinkStatus";
 pub const PD_DESIGN_COMPONENT: &str = "figcraft.vueBridge.designComponent";
+pub const PD_CAPTURE_KIND: &str = "figcraft.vueBridge.captureKind";
+pub const PD_PROTOTYPER_REF: &str = "figcraft.vueBridge.prototyperRef";
+pub const PD_SNAPSHOT_SHA256: &str = "figcraft.vueBridge.snapshotSha256";
 
 const SUPPORTED_TAGS: &[&str] = &[
     "div", "section", "main", "header", "footer", "article", "nav", "ul", "ol", "li", "button", "span", "p", "label", "h1",
