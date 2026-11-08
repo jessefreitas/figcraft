@@ -7,3 +7,4 @@ pub mod dev_resources;
 pub mod devcompare;
 pub mod devinspect;
 pub mod tailwind;
+pub mod vue_bridge;

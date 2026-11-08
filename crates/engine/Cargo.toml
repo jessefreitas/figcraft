@@ -31,6 +31,7 @@ base64 = { workspace = true }
 regex = { workspace = true }
 deunicode = { workspace = true }
 same-file = { workspace = true }
+sha2 = { workspace = true }
 web-time = "1.1.0"
 
 # Downloading a missing font (desktop only; the web keeps its built-in fonts). The bundled index

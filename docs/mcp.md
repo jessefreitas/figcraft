@@ -2,7 +2,9 @@
 
 FigCraft ships a [Model Context Protocol](https://modelcontextprotocol.io) server so AI agents can
 design with it: create and edit layers, run any menu command, inspect the result as JSON and look at
-it as a PNG. It speaks newline-delimited JSON-RPC 2.0 over stdio (MCP protocol `2025-06-18`;
+it as a PNG. For linking design autoria to **existing Vue SFCs** (map, static parse, review-only
+patches), see [`vue-bridge-mcp.md`](vue-bridge-mcp.md) — three additional MCP tools on builds that
+include the Vue bridge slice. It speaks newline-delimited JSON-RPC 2.0 over stdio (MCP protocol `2025-06-18`;
 `2025-03-26` and `2024-11-05` clients are accepted too).
 
 Incoming lines are limited to **32 MiB before the newline**, including whitespace. The limit is
