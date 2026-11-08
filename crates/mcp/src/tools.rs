@@ -112,6 +112,9 @@ pub const TOOL_NAMES: &[&str] = &[
     "type_text",
     "inspect_ui",
     "wait_for_changes",
+    "vue_bridge_map_inspect",
+    "vue_bridge_parse",
+    "vue_bridge_propose_patch",
 ];
 
 /// The tools that take `document`: they act on the file it names instead of the one in front.
@@ -387,6 +390,41 @@ fn tools() -> Vec<Value> {
             ),
             true,
         ),
+        tool(
+            "vue_bridge_map_inspect",
+            "Vue bridge: inspect map",
+            "Import vue-bridge.map.json and list designComponent → vuePath → dataAiId links, optionally checking names against the open document (engine vueBridge.mapInspect). Paths must stay inside automation read roots. Read-only.",
+            obj(
+                json!({
+                    "path": string("Path to vue-bridge.map.json under automation read roots"),
+                    "designComponent": string("Filter to one design component name"),
+                }),
+                &["path"],
+            ),
+            true,
+        ),
+        tool(
+            "vue_bridge_parse",
+            "Vue bridge: parse SFC",
+            "Statically parse an existing .vue file (props, emits, data-ai-id values). Does not run JavaScript or load the Vue compiler (engine vueBridge.parse). Use before proposing patches.",
+            obj(json!({"path": string("Path to .vue file under automation read roots")}), &["path"]),
+            true,
+        ),
+        tool(
+            "vue_bridge_propose_patch",
+            "Vue bridge: propose style patch",
+            "Build a review-only unified diff for scoped CSS from styleEdits and/or designChanges (e.g. from dev.compare). Does not write the file; apply only via vueBridge.applyStylePatch with matching sha256Before.",
+            obj(
+                json!({
+                    "path": string("Path to .vue file under automation read roots"),
+                    "requiredDataAiId": string("Emit guardrail warnings when this id is absent from template"),
+                    "styleEdits": {"type": "array", "items": obj(json!({"property": string("CSS property"), "value": string("CSS value"), "selector": string("Optional scoped selector")}), &["property", "value"])},
+                    "designChanges": {"type": "array", "items": obj(json!({"property": string(""), "before": string(""), "after": string("")}), &["property", "after"])},
+                }),
+                &["path"],
+            ),
+            true,
+        ),
     ]
 }
 
@@ -576,6 +614,9 @@ pub fn call_tool(b: &mut dyn Backend, name: &str, args: &Value) -> ToolResult {
         "type_text" => type_text(b, &a),
         "inspect_ui" => b.call("ui.inspect", json!({})).map(|v| ToolResult::json(&v)),
         "wait_for_changes" => wait_for_changes(b, &a),
+        "vue_bridge_map_inspect" => vue_bridge_map_inspect(b, &a),
+        "vue_bridge_parse" => vue_bridge_parse(b, &a),
+        "vue_bridge_propose_patch" => vue_bridge_propose_patch(b, &a),
         other => Err(format!("unknown tool `{other}` (tools/list has: {})", TOOL_NAMES.join(", "))),
     };
     r.unwrap_or_else(ToolResult::error)
@@ -1230,4 +1271,32 @@ fn type_text(b: &mut dyn Backend, a: &Map<String, Value>) -> Result<ToolResult, 
         }
         None => b.call("ui.type", json!({"text": text})).map(|v| ToolResult::json(&v)),
     }
+}
+
+fn vue_bridge_map_inspect(b: &mut dyn Backend, a: &Map<String, Value>) -> Result<ToolResult, String> {
+    let path = req_s(a, "path")?;
+    let mut params = json!({"path": path});
+    if let Some(name) = s_arg(a, "designComponent")? {
+        params["designComponent"] = json!(name);
+    }
+    exec(b, "vueBridge.mapInspect", params).map(|v| ToolResult::json(&v))
+}
+
+fn vue_bridge_parse(b: &mut dyn Backend, a: &Map<String, Value>) -> Result<ToolResult, String> {
+    let path = req_s(a, "path")?;
+    exec(b, "vueBridge.parse", json!({"path": path})).map(|v| ToolResult::json(&v))
+}
+
+fn vue_bridge_propose_patch(b: &mut dyn Backend, a: &Map<String, Value>) -> Result<ToolResult, String> {
+    let path = req_s(a, "path")?;
+    let mut params = json!({"path": path});
+    if let Some(id) = s_arg(a, "requiredDataAiId")? {
+        params["requiredDataAiId"] = json!(id);
+    }
+    for key in ["styleEdits", "designChanges", "layoutHints"] {
+        if let Some(v) = a.get(key).filter(|v| !v.is_null()) {
+            params[key] = v.clone();
+        }
+    }
+    exec(b, "vueBridge.proposeStylePatch", params).map(|v| ToolResult::json(&v))
 }

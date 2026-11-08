@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "links": [
+    {
+      "designComponent": "TechnicalButton",
+      "vuePath": "TechnicalButton.vue",
+      "dataAiId": "technical-button-fixture",
+      "notes": "TECHNICAL TEST FIXTURE — not ERP data"
+    }
+  ]
+}

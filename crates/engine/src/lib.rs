@@ -63,6 +63,7 @@ pub use content::templates;
 pub use content::textfit;
 pub use dev::annotations;
 pub use dev::code_connect;
+pub use dev::vue_bridge;
 pub use dev::codegen;
 pub use dev::component_codegen;
 pub use dev::dev_measurements;
@@ -642,6 +643,8 @@ mod view_behaviour_tests;
 mod vote_history_tests;
 #[cfg(test)]
 mod vue_codegen_tests;
+#[cfg(test)]
+mod vue_bridge_commands_tests;
 #[cfg(test)]
 mod widget_hover_tests;
 #[cfg(test)]
